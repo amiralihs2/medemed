@@ -2,11 +2,10 @@
 
 > Visual similarity search for medical images using frozen vision-transformer embeddings.
 
-[![CI](https://github.com/YOUR_USERNAME/medembed/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/medembed/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-MedEmbed turns a medical image into a semantic fingerprint using a pretrained vision-language transformer ([BiomedCLIP](https://microsoft.github.io/BiomedCLIP/)) and then finds visually similar cases in a FAISS index — in milliseconds, with **no model training required**. It also supports text queries ("colorectal adenocarcinoma with desmoplastic stroma") against the same image index, CLIP-style.
+MedEmbed turns a medical image into a semantic fingerprint using a pretrained vision-language transformer ([BiomedCLIP](https://microsoft.github.io/BiomedCLIP/)) and retrieves visually similar cases from a FAISS index using frozen model embeddings. It also supports text queries ("colorectal adenocarcinoma with desmoplastic stroma") against the same image index, CLIP-style.
 
 It's a minimal, honest take on the pattern underlying most modern clinical retrieval systems: frozen foundation model + vector index + thin UI. Build it once, point it at any medical imaging dataset, and you have a working "find cases like this" tool.
 
@@ -16,7 +15,7 @@ It's a minimal, honest take on the pattern underlying most modern clinical retri
 
 Radiologists, pathologists, and biomedical engineers routinely ask: *"have we seen something like this before?"* The textbook answer is a case library, but nobody has time to browse one. A well-pretrained vision transformer already knows enough about medical imagery that its frozen embeddings support useful similarity search out of the box — you don't need to fine-tune, you don't need a GPU at query time, and you don't need labeled data.
 
-This repo shows the whole pipeline end-to-end in under 500 lines of Python.
+The repository includes embedding and indexing modules, query and evaluation commands, and a Streamlit demo.
 
 ## Features
 
@@ -26,7 +25,7 @@ This repo shows the whole pipeline end-to-end in under 500 lines of Python.
 - **Image OR text queries** against the same index (multimodal retrieval)
 - **k-NN evaluation harness** — macro-F1 + per-class report on any MedMNIST split
 - **Streamlit demo app** with side-by-side query + top-K thumbnails
-- **Unit-tested core** (numpy utils + FAISS index), CI-ready
+- **Core unit tests** for NumPy utilities and the FAISS index
 
 ## Architecture
 
@@ -47,46 +46,45 @@ Every piece is replaceable: a different backbone, a different dataset, an approx
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/YOUR_USERNAME/medembed.git
-cd medembed
+git clone https://github.com/amiralihs2/medemed.git
+cd medemed
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+pip install -e .
 
-# 2. Build an index over 2000 PathMNIST tiles (~2 minutes on CPU)
+# 2. Build an index over 2000 training-set PathMNIST tiles
 python scripts/build_index.py \
-    --dataset pathmnist --split test --max-samples 2000 \
-    --model biomedclip --out artifacts/pathmnist_test
+    --dataset pathmnist --split train --max-samples 2000 \
+    --model biomedclip --out artifacts/pathmnist_train
 
 # 3. Query with an image
 python scripts/query.py \
-    --index artifacts/pathmnist_test \
+    --index artifacts/pathmnist_train \
     --image path/to/tile.png --k 5
 
 # 4. Or a natural-language query
 python scripts/query.py \
-    --index artifacts/pathmnist_test \
+    --index artifacts/pathmnist_train \
     --text "tumor epithelium with high nuclear density" --k 5
 
 # 5. Evaluate the embedding space via k-NN classification
 python scripts/evaluate.py \
-    --index artifacts/pathmnist_test \
-    --eval-dataset pathmnist --eval-split val --max-samples 1000 --k 5
+    --index artifacts/pathmnist_train \
+    --eval-dataset pathmnist --eval-split test --max-samples 1000 --k 5
 
 # 6. Launch the interactive demo
-streamlit run app/streamlit_app.py -- --index artifacts/pathmnist_test
+streamlit run app/streamlit_app.py -- --index artifacts/pathmnist_train
 ```
 
-## Example results
+## Evaluation and benchmark status
 
-Replace this table with your own numbers after running `scripts/evaluate.py`.
+The evaluation command reports **accuracy**, **macro-F1**, and a per-class classification report using majority-vote k-NN over the indexed labels.
 
-| Backbone        | Dataset      | Index size | k | Accuracy | Macro-F1 |
-|-----------------|--------------|-----------:|--:|---------:|---------:|
-| BiomedCLIP ViT-B/16 | PathMNIST  | 10 000     | 5 | —        | —        |
-| BiomedCLIP ViT-B/16 | DermaMNIST | 7 000      | 5 | —        | —        |
-| CLIP ViT-B/16 (generic) | PathMNIST | 10 000  | 5 | —        | —        |
+No measured benchmark results are currently checked into this repository. A performance advantage over generic CLIP has not been established here, and query latency has not been benchmarked.
 
-The point is the **gap**: a medical-domain backbone beats a generic one on medical imagery, without any training.
+The quickstart builds an index from the **training split** and evaluates on the separate **test split**. For a backbone comparison, keep the dataset, sample counts, splits, and k identical, and rebuild the index with the same model used for evaluation. Save the command, model, dataset split, index size, query count, and printed results with each run.
+
+The core tests are in `tests/`; this repository does not currently configure a GitHub Actions CI workflow.
 
 ## Repo layout
 
@@ -129,5 +127,5 @@ If you use this project, please also cite BiomedCLIP:
 
 ## Author
 
-**Amirali Hedayati** — M.Sc. Medical Image & Data Processing, FAU Erlangen-Nuremberg.
+**Amirali Hedayati** — Medical Engineering master's student, specializing in Medical Image & Data Processing at FAU Erlangen-Nuremberg.
 Built to bridge my hospital-floor medical-device experience with modern vision-language ML.
